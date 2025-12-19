@@ -1,172 +1,246 @@
+/**
+ * JST Power Equipment - Sorteo de Posada 2025
+ *
+ * REGLAS ESPECIALES:
+ * - ID 39:
+ *    1ra vez → LUIS
+ *    2da vez → ANGEL
+ *    3ra+ → cualquiera elegible
+ * - Re-rifas tienen animación de shuffle
+ */
+
+const LUIS = "SALCIDO MENDEZ LUIS ANGEL";
+const ANGEL = "ANGEL DANIEL SANCHEZ SARABIA";
+
+const idsAsadores = [
+  "43",
+  "44",
+  "45",
+  "49",
+  "54",
+  "59",
+  "65",
+  "66",
+  "69",
+  "74",
+];
+
+// =======================
+// ESTADO GLOBAL
+// =======================
 let participantes = [];
 let regalos = [];
 let elegibles = [];
 let disponibles = [];
 let historial = [];
 
-const btnRifar5 = document.getElementById('btnRifar5');
-const ganadoresActualesEl = document.getElementById('ganadoresActuales');
-const historialEl = document.getElementById('historial');
-const statElegibles = document.getElementById('stat-elegibles');
-const statDisponibles = document.getElementById('stat-disponibles');
+let veces39Rifado = 0;
 
+// =======================
+// DOM
+// =======================
+const btnRifar5 = document.getElementById("btnRifar5");
+const ganadoresActualesEl = document.getElementById("ganadoresActuales");
+const historialEl = document.getElementById("historial");
+const statElegibles = document.getElementById("stat-elegibles");
+const statDisponibles = document.getElementById("stat-disponibles");
+
+// =======================
+// INIT
+// =======================
 async function init() {
-    try {
-        const [resP, resR] = await Promise.all([
-            fetch('participantes.json'),
-            fetch('regalos.json')
-        ]);
-        participantes = await resP.json();
-        regalos = await resR.json();
-        
-        elegibles = [...participantes];
-        disponibles = [...regalos];
-        
-        actualizarStats();
-        btnRifar5.disabled = false;
-    } catch (e) {
-        console.error("Error al cargar datos:", e);
-    }
+  const [resP, resR] = await Promise.all([
+    fetch("participantes.json"),
+    fetch("regalos.json"),
+  ]);
+
+  participantes = await resP.json();
+  regalos = await resR.json();
+
+  elegibles = participantes.filter((p) => p !== LUIS && p !== ANGEL);
+
+  disponibles = [...regalos];
+
+  actualizarStats();
+  btnRifar5.disabled = false;
 }
 
 function actualizarStats() {
-    statElegibles.innerText = elegibles.length;
-    statDisponibles.innerText = disponibles.length;
+  statElegibles.innerText = elegibles.length;
+  statDisponibles.innerText = disponibles.length;
 }
 
-btnRifar5.onclick = async () => {
-    const numASortear = Math.min(5, elegibles.length, disponibles.length);
-    if (numASortear === 0) return;
+// =======================
+// BOTÓN PRINCIPAL
+// =======================
+btnRifar5.onclick = () => {
+  const num = Math.min(5, elegibles.length, disponibles.length);
+  if (num === 0) return;
 
-    btnRifar5.disabled = true;
-    ganadoresActualesEl.innerHTML = '';
-    
-    const slots = [];
-    for (let i = 0; i < numASortear; i++) {
-        const rIdx = Math.floor(Math.random() * disponibles.length);
-        const regalo = disponibles.splice(rIdx, 1)[0];
-        
-        const card = document.createElement('div');
-        // Fusion de diseño: Borde redondeado grueso, fondo blanco, sombra sutil
-        card.className = "bg-white border-b-8 border-jst-blue p-6 shadow-md h-70 h-max-90 flex flex-col justify-between winner-card";
-        card.innerHTML = `
-            <div class="text-jst-red font-bold-jst text-5xl leading-none">#${regalo.id}</div>
-            <div class="name-display text-xl font-bold-jst text-slate-300 uppercase leading-tight min-h-[3rem] flex items-center">
-                GIRANDO...
-            </div>
-            <div class="text-slate-400 text-[10px] font-bold uppercase italic border-t border-slate-100 pt-2">
-                ${regalo.nombre}
-            </div>
-        `;
-        ganadoresActualesEl.appendChild(card);
-        slots.push({ card, regalo });
-    }
+  btnRifar5.disabled = true;
+  ganadoresActualesEl.innerHTML = "";
 
-    // Animación de Shuffle
-    const duration = 4000;
-    const startTime = Date.now();
+  const slots = [];
 
-    const interval = setInterval(() => {
-        slots.forEach(slot => {
-            const randomIdx = Math.floor(Math.random() * elegibles.length);
-            slot.card.querySelector('.name-display').innerText = elegibles[randomIdx];
-        });
+  for (let i = 0; i < num; i++) {
+    const rIdx = Math.floor(Math.random() * disponibles.length);
+    const regalo = disponibles.splice(rIdx, 1)[0];
 
-        if (Date.now() - startTime >= duration) {
-            clearInterval(interval);
-            completarSorteo(slots);
-        }
-    }, 80);
+    const card = crearCard(regalo, "GIRANDO...");
+    ganadoresActualesEl.appendChild(card);
+    slots.push({ card, regalo });
+  }
+
+  animarShuffle(slots, () => completarSorteo(slots));
 };
 
-function completarSorteo(slots) {
-    slots.forEach(slot => {
-        const pIdx = Math.floor(Math.random() * elegibles.length);
-        const ganadorReal = elegibles.splice(pIdx, 1)[0];
-        
-        const item = { ganador: ganadorReal, regalo: slot.regalo };
-        historial.push(item);
+// =======================
+// SHUFFLE GENÉRICO
+// =======================
+function animarShuffle(slots, callback) {
+  const start = Date.now();
+  const duration = 4000;
 
-        const nameEl = slot.card.querySelector('.name-display');
-        nameEl.innerText = ganadorReal;
-        nameEl.className = "name-display text-2xl font-bold-jst text-jst-blue uppercase leading-tight min-h-[3rem] flex items-center";
-        
-        // Botón de No Asistió integrado sutilmente
-        const btnNoAsistio = document.createElement('button');
-        btnNoAsistio.className = "mt-2 text-[9px] font-bold text-slate-300 hover:text-jst-red transition-colors self-end uppercase";
-        btnNoAsistio.innerText = "Re-sortear regalo";
-        btnNoAsistio.onclick = () => reSorteoIndividual(item, slot.card);
-        slot.card.appendChild(btnNoAsistio);
+  const interval = setInterval(() => {
+    slots.forEach((slot) => {
+      const idx = Math.floor(Math.random() * elegibles.length);
+      slot.card.querySelector(".name-display").innerText = elegibles[idx];
     });
 
+    if (Date.now() - start >= duration) {
+      clearInterval(interval);
+      callback();
+    }
+  }, 80);
+}
+
+// =======================
+// LÓGICA CENTRAL
+// =======================
+function completarSorteo(slots) {
+  const slot39 = slots.find((s) => s.regalo.id === "39");
+
+  if (slot39) {
+    veces39Rifado++;
+
+    if (veces39Rifado === 1) slot39.ganador = LUIS;
+    else if (veces39Rifado === 2) slot39.ganador = ANGEL;
+    else slot39.ganador = sacarElegible();
+
+    slot39.procesado = true;
+    finalizarSlot(slot39);
+  }
+
+  slots.forEach((slot) => {
+    if (slot.procesado) return;
+
+    slot.ganador = sacarElegible();
+    slot.procesado = true;
+    finalizarSlot(slot);
+  });
+
+  actualizarStats();
+  actualizarHistorialUI();
+  btnRifar5.disabled = false;
+}
+
+function sacarElegible() {
+  const idx = Math.floor(Math.random() * elegibles.length);
+  return elegibles.splice(idx, 1)[0];
+}
+
+// =======================
+// FINALIZAR SLOT
+// =======================
+function finalizarSlot(slot) {
+  const item = { ganador: slot.ganador, regalo: slot.regalo };
+  historial.push(item);
+  actualizarUIInmediata(slot, slot.ganador, item);
+}
+
+// =======================
+// UI
+// =======================
+function crearCard(regalo, texto) {
+  const card = document.createElement("div");
+  card.className =
+    "bg-white border-b-8 border-jst-blue p-6 shadow-md h-56 flex flex-col justify-between winner-card";
+
+  card.innerHTML = `
+    <div class="text-jst-red font-bold-jst text-5xl">#${regalo.id}</div>
+    <div class="name-display text-xl font-bold-jst text-slate-300 uppercase min-h-[3rem] flex items-center">
+      ${texto}
+    </div>
+    <div class="text-slate-400 text-[10px] font-bold uppercase italic border-t pt-2">
+      ${regalo.nombre}
+    </div>
+  `;
+  return card;
+}
+
+function actualizarUIInmediata(slot, ganador, item) {
+  const el = slot.card.querySelector(".name-display");
+  el.innerText = ganador;
+  el.className =
+    "name-display text-2xl font-bold-jst text-jst-blue uppercase min-h-[3rem] flex items-center";
+
+  const btn = document.createElement("button");
+  btn.className =
+    "mt-2 text-[9px] font-bold text-slate-300 hover:text-jst-red self-end uppercase";
+  btn.innerText = "Re-sortear ID";
+  btn.onclick = () => reSorteoIndividual(item, slot.card);
+
+  slot.card.appendChild(btn);
+}
+
+// =======================
+// RE-SORTEO CON SHUFFLE
+// =======================
+function reSorteoIndividual(item, card) {
+  disponibles.push(item.regalo);
+  historial = historial.filter((h) => h !== item);
+  card.remove();
+
+  const regalo = disponibles.splice(disponibles.indexOf(item.regalo), 1)[0];
+
+  const slot = {
+    regalo,
+    card: crearCard(regalo, "RE-RIFANDO..."),
+  };
+
+  ganadoresActualesEl.appendChild(slot.card);
+
+  animarShuffle([slot], () => {
+    if (regalo.id === "39") {
+      veces39Rifado++;
+
+      if (veces39Rifado === 2) slot.ganador = ANGEL;
+      else slot.ganador = sacarElegible();
+    } else {
+      slot.ganador = sacarElegible();
+    }
+
+    finalizarSlot(slot);
     actualizarStats();
     actualizarHistorialUI();
-    btnRifar5.disabled = false;
+  });
 }
 
-function reSorteoIndividual(item, card) {
-    // Regresamos el ID del regalo
-    disponibles.push(item.regalo);
-    historial = historial.filter(h => h.ganador !== item.ganador);
-    
-    card.style.opacity = '0';
-    card.style.transform = 'scale(0.9)';
-    
-    setTimeout(() => {
-        card.remove();
-        // Rifamos inmediatamente el regalo recuperado
-        const rIdx = disponibles.indexOf(item.regalo);
-        const regaloRecuperado = disponibles.splice(rIdx, 1)[0];
-        
-        const newCard = document.createElement('div');
-        newCard.className = "bg-white border-b-8 border-jst-red p-6 shadow-md h-56 flex flex-col justify-between winner-card";
-        newCard.innerHTML = `
-            <div class="text-jst-red font-bold-jst text-5xl leading-none">#${regaloRecuperado.id}</div>
-            <div class="name-display text-xl font-bold-jst text-jst-blue uppercase leading-tight min-h-[3rem] flex items-center">
-                NUEVO SORTEO...
-            </div>
-            <div class="text-slate-400 text-[10px] font-bold uppercase italic border-t border-slate-100 pt-2">
-                ${regaloRecuperado.nombre}
-            </div>
-        `;
-        ganadoresActualesEl.appendChild(newCard);
-        
-        // Shuffle rápido para el re-sorteo
-        let t = 0;
-        const subShuffle = setInterval(() => {
-            newCard.querySelector('.name-display').innerText = elegibles[Math.floor(Math.random() * elegibles.length)];
-            t++;
-            if(t > 20) {
-                clearInterval(subShuffle);
-                const finalIdx = Math.floor(Math.random() * elegibles.length);
-                const nuevoGanador = elegibles.splice(finalIdx, 1)[0];
-                const nuevoItem = { ganador: nuevoGanador, regalo: regaloRecuperado };
-                
-                const finalNameEl = newCard.querySelector('.name-display');
-                finalNameEl.innerText = nuevoGanador;
-                finalNameEl.className = "name-display text-2xl font-bold-jst text-jst-blue uppercase leading-tight min-h-[3rem] flex items-center";
-                
-                historial.push(nuevoItem);
-                actualizarStats();
-                actualizarHistorialUI();
-
-                const btn = document.createElement('button');
-                btn.className = "mt-2 text-[9px] font-bold text-slate-300 hover:text-jst-red transition-colors self-end uppercase";
-                btn.innerText = "Re-sortear ID";
-                btn.onclick = () => reSorteoIndividual(nuevoItem, newCard);
-                newCard.appendChild(btn);
-            }
-        }, 60);
-    }, 300);
-}
-
+// =======================
+// HISTORIAL
+// =======================
 function actualizarHistorialUI() {
-    historialEl.innerHTML = historial.map(h => `
-        <div class="bg-slate-50 p-3 rounded-lg border border-slate-100 flex flex-col gap-1 shadow-sm">
-            <span class="font-bold-jst text-jst-red text-lg leading-none">#${h.regalo.id}</span>
-            <span class="text-[10px] font-bold text-slate-700 uppercase truncate">${h.ganador}</span>
-        </div>
-    `).reverse().join('');
+  historialEl.innerHTML = historial
+    .map(
+      (h) => `
+      <div class="bg-slate-50 p-3 rounded-2xl border shadow-sm">
+        <span class="font-bold-jst text-jst-red text-lg">#${h.regalo.id}</span>
+        <span class="text-[10px] font-bold uppercase">${h.ganador}</span>
+      </div>
+    `
+    )
+    .reverse()
+    .join("");
 }
 
-document.addEventListener('DOMContentLoaded', init);
+document.addEventListener("DOMContentLoaded", init);
